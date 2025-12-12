@@ -3,13 +3,13 @@ import numpy as np
 from tensorflow.keras.models import load_model
 from tensorflow.keras.datasets import fashion_mnist
 from tensorflow.keras.utils import to_categorical
-import matplotlib.pyplot as plt
 from PIL import Image, ImageOps
-import cv2
+import matplotlib.pyplot as plt
+from streamlit_drawable_canvas import st_canvas
 
 st.set_page_config(page_title="Fashion MNIST Classifier", layout="wide")
 
-# Label names
+# Labels
 labels = [
     "T-shirt/top", "Trouser", "Pullover", "Dress", "Coat",
     "Sandal", "Shirt", "Sneaker", "Bag", "Ankle boot"
@@ -18,90 +18,92 @@ labels = [
 # Load Model
 @st.cache_resource
 def load_cnn_model():
-    model = load_model("fashion_model.h5")
-    return model
+    return load_model("fashion_model.h5")
 
 model = load_cnn_model()
 
-# Preprocess image
+# Preprocess Image
 def preprocess(img):
     img = img.resize((28, 28)).convert("L")
-    img = ImageOps.invert(img)  # invert for better prediction
+    img = ImageOps.invert(img)
     img = np.array(img).astype("float32") / 255.0
     img = img.reshape(1, 28, 28, 1)
     return img
 
 st.title("👗 Fashion MNIST – Deep Learning App (All in One)")
-st.write("Upload an image, draw an image, view dataset samples, train model, and predict – all inside one app.")
 
-tab1, tab2, tab3, tab4 = st.tabs(["📤 Upload Image", "✍️ Draw", "📊 Dataset Samples", "🧠 Train Model"])
+tab1, tab2, tab3, tab4 = st.tabs(["📤 Upload Image", "✍️ Draw", "📊 Samples", "🧠 Train Model"])
 
-# ----------------------------
+# ----------------------
 # TAB 1: UPLOAD IMAGE
-# ----------------------------
+# ----------------------
 with tab1:
-    st.header("📤 Upload an Image for Prediction")
+    st.header("Upload an Image")
 
-    uploaded = st.file_uploader("Upload a 28x28 clothing item (jpg/png)", type=["jpg", "png", "jpeg"])
+    uploaded = st.file_uploader("Upload a clothing image (png/jpg)", type=["png", "jpg", "jpeg"])
 
-    if uploaded is not None:
+    if uploaded:
         img = Image.open(uploaded)
-        st.image(img, caption="Uploaded Image", width=200)
+        st.image(img, width=200)
 
         processed = preprocess(img)
         pred = model.predict(processed)
         label = labels[np.argmax(pred)]
+
         st.success(f"Prediction: **{label}**")
 
-# ----------------------------
-# TAB 2: DRAW DIGIT
-# ----------------------------
+# ----------------------
+# TAB 2: DRAW CANVAS
+# ----------------------
 with tab2:
-    st.header("✍️ Draw an Item (like a shirt, shoe, bag)")
+    st.header("Draw Clothing Item")
 
-    canvas = st.canvas(
-        fill_color="black",
+    canvas = st_canvas(
+        fill_color="#000000",
+        stroke_color="#FFFFFF",
         stroke_width=10,
-        stroke_color="white",
         width=300,
-        height=300
+        height=300,
+        drawing_mode="freedraw",
+        key="canvas"
     )
 
     if st.button("Predict Drawing"):
         if canvas.image_data is not None:
-            img = canvas.image_data
-            img = cv2.resize(img, (28, 28))
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            img = Image.fromarray(img)
+            # Convert canvas → PIL Image
+            img = Image.fromarray(canvas.image_data.astype("uint8"))
+            img = img.convert("L")
+            img = img.resize((28, 28))
+
             processed = preprocess(img)
             pred = model.predict(processed)
             label = labels[np.argmax(pred)]
+
             st.success(f"Prediction: **{label}**")
 
-# ----------------------------
-# TAB 3: VIEW DATASET
-# ----------------------------
+# ----------------------
+# TAB 3: SAMPLES
+# ----------------------
 with tab3:
-    st.header("📊 Fashion MNIST Samples")
+    st.header("Dataset Samples")
 
     (X_train, y_train), _ = fashion_mnist.load_data()
-    
-    col1, col2, col3, col4 = st.columns(4)
 
-    for i, col in zip(range(4), [col1, col2, col3, col4]):
+    cols = st.columns(4)
+    for i, col in zip(range(4), cols):
         col.image(X_train[i], caption=labels[y_train[i]], use_column_width=True)
 
-# ----------------------------
+# ----------------------
 # TAB 4: TRAIN MODEL
-# ----------------------------
+# ----------------------
 with tab4:
-    st.header("🧠 Train a New Model (Optional)")
+    st.header("Train New Model")
 
-    if st.button("Start Training (Takes 1–2 mins)"):
-        st.write("Training model... please wait")
+    if st.button("Start Training"):
+        st.write("Training... please wait")
 
         (X_train, y_train), (X_test, y_test) = fashion_mnist.load_data()
-        
+
         X_train = X_train.reshape(-1, 28, 28, 1) / 255.0
         X_test = X_test.reshape(-1, 28, 28, 1) / 255.0
 
@@ -118,6 +120,7 @@ with tab4:
             MaxPooling2D((2, 2)),
             Flatten(),
             Dense(128, activation="relu"),
+            Dropout(0.25),
             Dense(10, activation="softmax")
         ])
 
@@ -129,5 +132,4 @@ with tab4:
 
         new_model.save("fashion_model.h5")
 
-        st.success("🎉 Training Completed! Model saved as fashion_model.h5")
-
+        st.success("Model Training Complete! New model saved.")
